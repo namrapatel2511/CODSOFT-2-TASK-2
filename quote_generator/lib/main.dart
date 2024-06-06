@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math';
+import 'package:video_player/video_player.dart';
 
 void main() {
   runApp(MyApp());
@@ -57,12 +59,30 @@ class QuotePage extends StatefulWidget {
 class _QuotePageState extends State<QuotePage> {
   String quote = 'Loading...';
   List<Quote> savedQuotes = [];
+  late VideoPlayerController _controller;
+  bool _isVideoInitialized = false;
 
   @override
   void initState() {
     super.initState();
     fetchQuote();
     loadSavedQuotes();
+    _controller = VideoPlayerController.asset('assets/background.mp4')
+      ..initialize().then((_) {
+        setState(() {
+          _controller.setLooping(true);
+          _controller.play();
+          _isVideoInitialized = true;
+        });
+      }).catchError((error) {
+        print("Error initializing video player: $error");
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   Future<void> fetchQuote() async {
@@ -112,6 +132,45 @@ class _QuotePageState extends State<QuotePage> {
     }
   }
 
+  void showShareOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy, color: Colors.white),
+              title: const Text('Copy to clipboard',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: quote));
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Copied to clipboard!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: Colors.white),
+              title: const Text('Other options',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.of(context).pop();
+                Share.share(
+                  quote,
+                  subject: 'Quote from Random Quote App',
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -119,56 +178,75 @@ class _QuotePageState extends State<QuotePage> {
         title: const Text('Random Quote App'),
         backgroundColor: Colors.black,
       ),
-      body: Container(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              '"$quote"',
-              style: GoogleFonts.roboto(
-                textStyle: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.white,
-                ),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      body: _isVideoInitialized
+          ? Stack(
               children: [
-                ElevatedButton.icon(
-                  onPressed: fetchQuote,
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 15),
+                SizedBox.expand(
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _controller.value.size?.width ?? 0,
+                      height: _controller.value.size?.height ?? 0,
+                      child: VideoPlayer(_controller),
+                    ),
                   ),
-                  icon: const Icon(Icons.refresh, size: 28),
-                  label: Text('New Quote',
-                      style: GoogleFonts.roboto(fontSize: 18)),
                 ),
-                const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  onPressed: saveQuote,
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 15),
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  color: Colors.black.withOpacity(0.2),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      Text(
+                        '"$quote"',
+                        style: GoogleFonts.roboto(
+                          textStyle: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.white,
+                          ),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: fetchQuote,
+                            style: ElevatedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 15),
+                            ),
+                            icon: const Icon(Icons.refresh, size: 28),
+                            label: Text('New Quote',
+                                style: GoogleFonts.roboto(fontSize: 18)),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton.icon(
+                            onPressed: saveQuote,
+                            style: ElevatedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 15),
+                            ),
+                            icon: const Icon(Icons.favorite,
+                                color: Colors.red, size: 28),
+                            label: Text('Save',
+                                style: GoogleFonts.roboto(fontSize: 18)),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  icon: const Icon(Icons.favorite, color: Colors.red, size: 28),
-                  label: Text('Save', style: GoogleFonts.roboto(fontSize: 18)),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
+            )
+          : Center(child: CircularProgressIndicator()),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.black,
         items: const [
@@ -179,6 +257,10 @@ class _QuotePageState extends State<QuotePage> {
           BottomNavigationBarItem(
             icon: Icon(Icons.save, color: Colors.white),
             label: 'Saved Quotes',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.share, color: Colors.white),
+            label: 'Share Quote',
           ),
         ],
         onTap: (index) {
@@ -191,6 +273,8 @@ class _QuotePageState extends State<QuotePage> {
                 builder: (context) => SavedQuotesPage(savedQuotes, removeQuote),
               ),
             );
+          } else if (index == 2) {
+            showShareOptions();
           }
         },
       ),
